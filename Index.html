@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>비트 카드 진법 변환기 (Binary & Hex Converter)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a',
+                        },
+                        nibbleA: '#8b5cf6', // Violet for High Nibble
+                        nibbleB: '#ec4899', // Pink for Low Nibble
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            min-height: 100vh;
+        }
+
+        /* Card flip effect */
+        .bit-card-container {
+            perspective: 1000px;
+        }
+
+        .bit-card {
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s, box-shadow 0.2s;
+            transform-style: preserve-3d;
+        }
+
+        .bit-card:hover {
+            transform: translateY(-4px) scale(1.03);
+        }
+
+        .bit-card:active {
+            transform: translateY(0) scale(0.97);
+        }
+
+        .bit-card.active-bit {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.5), 0 0 15px rgba(59, 130, 246, 0.3);
+            border-color: #60a5fa;
+        }
+
+        .bit-card.active-nibble-a {
+            background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+            box-shadow: 0 10px 25px -5px rgba(139, 92, 246, 0.5), 0 0 15px rgba(139, 92, 246, 0.3);
+            border-color: #a78bfa;
+        }
+
+        .bit-card.active-nibble-b {
+            background: linear-gradient(135deg, #ec4899 0%, #be185d 100%);
+            box-shadow: 0 10px 25px -5px rgba(236, 72, 153, 0.5), 0 0 15px rgba(236, 72, 153, 0.3);
+            border-color: #f472b6;
+        }
+
+        .glow-text {
+            text-shadow: 0 0 12px rgba(59, 130, 246, 0.6);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-blue-500 selection:text-white">
+
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                    <i class="fa-solid fa-microchip text-xl text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
+                        비트 카드 진법 변환기
+                    </h1>
+                    <p class="text-xs text-slate-400">8비트 카드 비주얼 학습 & 실시간 진법 변환 웹앱</p>
+                </div>
+            </div>
+
+            <!-- Sound toggle & Presets dropdown -->
+            <div class="flex items-center space-x-2">
+                <button id="soundToggleBtn" onclick="toggleSound()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-300 flex items-center space-x-2 transition">
+                    <i id="soundIcon" class="fa-solid fa-volume-high text-blue-400"></i>
+                    <span id="soundText">사운드 ON</span>
+                </button>
+                <div class="h-4 w-px bg-slate-800"></div>
+                <button onclick="resetValue()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-300 transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-rotate-left"></i>
+                    <span>초기화 (0)</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-6xl w-full mx-auto px-4 py-6 flex flex-col space-y-6">
+
+        <!-- Tab Selector -->
+        <div class="bg-slate-900 p-1.5 rounded-2xl border border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-1.5 shadow-inner">
+            <button id="tab-bin-dec" onclick="switchMode('bin-dec')" class="tab-btn px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center space-x-2 bg-blue-600 text-white shadow-lg shadow-blue-600/30">
+                <i class="fa-solid fa-calculator"></i>
+                <span>2진수 ↔ 10진수</span>
+            </button>
+
+            <button id="tab-hex-dec" onclick="switchMode('hex-dec')" class="tab-btn px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center space-x-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+                <i class="fa-solid fa-hashtag"></i>
+                <span>16진수 ↔ 10진수</span>
+            </button>
+
+            <button id="tab-bin-hex" onclick="switchMode('bin-hex')" class="tab-btn px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center space-x-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+                <i class="fa-solid fa-shuffle"></i>
+                <span>2진수 ↔ 16진수</span>
+            </button>
+        </div>
+
+        <div class="bg-slate-900/60 rounded-xl border border-slate-800/80 p-3 flex items-center justify-between flex-wrap gap-2 text-xs">
+            <span class="text-slate-400 font-medium flex items-center space-x-1.5">
+                <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
+                <span>빠른 추천값:</span>
+            </span>
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <button onclick="setValue(0)" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition">0</button>
+                <button onclick="setValue(1)" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition">1</button>
+                <button onclick="setValue(15)" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition">15 (0x0F)</button>
+                <button onclick="setValue(65)" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition">65 ('A')</button>
+                <button onclick="setValue(128)" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition">128 (0x80)</button>
+                <button onclick="setValue(170)" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition">170 (10101010)</button>
+                <button onclick="setValue(255)" class="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono transition">255 (0xFF)</button>
+                <button onclick="setRandomValue()" class="px-2.5 py-1 rounded-md bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/30 text-indigo-300 transition flex items-center space-x-1">
+                    <i class="fa-solid fa-dice"></i>
+                    <span>랜덤</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- MODE 1: 2진수 <> 10진수 변환 -->
+        <!-- ========================================================================= -->
+        <section id="view-bin-dec" class="mode-view space-y-6">
+            
+            <!-- Decimal Input Display Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+                <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                
+                <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div class="w-full md:w-1/2 space-y-2">
+                        <label for="dec-input-m1" class="text-xs uppercase tracking-wider text-slate-400 font-semibold flex items-center space-x-2">
+                            <span>10진수 (Decimal) 입력/확인</span>
+                            <span class="text-slate-500 text-[10px] lowercase">(범위: 0 ~ 255)</span>
+                        </label>
+                        <div class="relative flex items-center">
+                            <input type="number" id="dec-input-m1" min="0" max="255" value="0" oninput="onDecimalInput(this.value)"
+                                class="w-full bg-slate-950 border-2 border-slate-700 focus:border-blue-500 rounded-xl px-4 py-3 text-3xl font-bold font-mono text-blue-400 outline-none transition shadow-inner">
+                            <div class="absolute right-3 flex space-x-1">
+                                <button onclick="adjustValue(-1)" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-lg active:scale-95 transition">-</button>
+                                <button onclick="adjustValue(1)" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-lg active:scale-95 transition">+</button>
+                            </div>
+                        </div>
+                        <!-- Range slider -->
+                        <input type="range" id="dec-slider-m1" min="0" max="255" value="0" oninput="onDecimalInput(this.value)"
+                            class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                    </div>
+
+                    <div class="w-full md:w-1/2 bg-slate-950/60 border border-slate-800 rounded-xl p-4 flex flex-col justify-center space-y-1">
+                        <div class="text-xs text-slate-400 flex justify-between">
+                            <span>16진수 표현:</span>
+                            <span id="m1-hex-val" class="font-mono font-bold text-indigo-400 text-sm">0x00</span>
+                        </div>
+                        <div class="text-xs text-slate-400 flex justify-between">
+                            <span>ASCII 문자 (해당 시):</span>
+                            <span id="m1-ascii-val" class="font-mono font-bold text-emerald-400 text-sm">제어문자</span>
+                        </div>
+                        <div class="text-xs text-slate-400 flex justify-between">
+                            <span>활성화된 비트 수:</span>
+                            <span id="m1-active-bits" class="font-mono font-bold text-blue-400 text-sm">0 / 8 비트</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-200 flex items-center space-x-2">
+                            <span>8비트 카드 인터페이스</span>
+                            <span class="text-xs font-normal text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full">카드를 클릭해 0과 1을 토글하세요</span>
+                        </h2>
+                    </div>
+                    <div class="text-xs text-slate-400 hidden sm:block">
+                        MSB (최상위 비트) ↔ LSB (최하위 비트)
+                    </div>
+                </div>
+
+                <!-- 8-Bit Cards Display Container -->
+                <div class="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-3 my-4" id="bit-cards-m1">
+                    <!-- Javascript generated bit cards -->
+                </div>
+
+                <!-- Mathematical Expansion Formula -->
+                <div class="mt-4 p-4 rounded-xl bg-slate-950/80 border border-slate-800/80 space-y-2">
+                    <div class="text-xs text-slate-400 font-semibold flex items-center space-x-1.5">
+                        <i class="fa-solid fa-square-root-variable text-blue-400"></i>
+                        <span>10진수 계산 연산 과정:</span>
+                    </div>
+                    <div id="math-expansion-m1" class="font-mono text-xs text-slate-300 break-all leading-relaxed bg-slate-900 p-3 rounded-lg border border-slate-800">
+                        <!-- Mathematical step display -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================================================= -->
+        <!-- MODE 2: 16진수 <> 10진수 변환 -->
+        <!-- ========================================================================= -->
+        <section id="view-hex-dec" class="mode-view space-y-6 hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                <!-- Left Column: Hex Digit Interactive Selector -->
+                <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-200 flex items-center space-x-2">
+                            <span>16진수 카드 자릿수 선택기</span>
+                        </h2>
+                        <p class="text-xs text-slate-400 mt-1">
+                            16진수는 0~9, A(10), B(11), C(12), D(13), E(14), F(15) 총 16가지 기호로 표현합니다.
+                        </p>
+                    </div>
+
+                    <!-- 2 Hex Digit Cards Grid -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- High Nibble Card (16^1 자리) -->
+                        <div class="bg-slate-950 border-2 border-violet-500/40 rounded-xl p-4 flex flex-col items-center space-y-3 relative overflow-hidden">
+                            <div class="absolute top-2 left-2 text-[10px] font-bold text-violet-400 uppercase tracking-wider bg-violet-500/10 px-2 py-0.5 rounded">
+                                상위 자릿수 ($16^1 = 16$)
+                            </div>
+                            <div class="pt-4 text-center">
+                                <div id="hex-digit-high-display" class="text-6xl font-black font-mono text-violet-400 my-2">0</div>
+                                <div id="hex-digit-high-dec" class="text-xs font-mono text-slate-400">값: 0 (0 × 16 = 0)</div>
+                            </div>
+                            
+                            <!-- Keypad / Selector for High Nibble -->
+                            <div class="w-full grid grid-cols-4 gap-1 pt-2">
+                                <template id="hex-btn-template">
+                                    <button class="hex-pick-btn h-8 rounded bg-slate-900 hover:bg-violet-600/30 text-xs font-mono font-bold border border-slate-800 transition"></button>
+                                </template>
+                                <div id="high-hex-picker" class="contents"></div>
+                            </div>
+                        </div>
+
+                        <!-- Low Nibble Card (16^0 자리) -->
+                        <div class="bg-slate-950 border-2 border-pink-500/40 rounded-xl p-4 flex flex-col items-center space-y-3 relative overflow-hidden">
+                            <div class="absolute top-2 left-2 text-[10px] font-bold text-pink-400 uppercase tracking-wider bg-pink-500/10 px-2 py-0.5 rounded">
+                                하위 자릿수 ($16^0 = 1$)
+                            </div>
+                            <div class="pt-4 text-center">
+                                <div id="hex-digit-low-display" class="text-6xl font-black font-mono text-pink-400 my-2">0</div>
+                                <div id="hex-digit-low-dec" class="text-xs font-mono text-slate-400">값: 0 (0 × 1 = 0)</div>
+                            </div>
+
+                            <!-- Keypad / Selector for Low Nibble -->
+                            <div id="low-hex-picker" class="w-full grid grid-cols-4 gap-1 pt-2"></div>
+                        </div>
+                    </div>
+
+                    <!-- Direct Hex Text Input -->
+                    <div class="space-y-2">
+                        <label for="hex-direct-input" class="text-xs text-slate-400 font-semibold flex items-center justify-between">
+                            <span>직접 16진수 입력 (00 ~ FF):</span>
+                            <span class="text-slate-500 text-[10px]">대소문자 자동 변환</span>
+                        </label>
+                        <div class="relative">
+                            <span class="absolute left-4 top-1/2 -translate-y-1/2 font-mono text-lg text-slate-500 font-bold">0x</span>
+                            <input type="text" id="hex-direct-input" maxlength="2" value="00" oninput="onHexDirectInput(this.value)"
+                                class="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl pl-12 pr-4 py-2.5 font-mono text-xl font-bold uppercase text-indigo-400 outline-none transition">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Decimal Result & Explanation -->
+                <div class="lg:col-span-5 flex flex-col space-y-6">
+                    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex-1 flex flex-col justify-between space-y-6">
+                        <div class="space-y-4">
+                            <h3 class="text-xs uppercase tracking-wider text-slate-400 font-semibold">10진수 변환 결과</h3>
+                            <div class="bg-slate-950 border border-slate-800 rounded-xl p-6 text-center space-y-1">
+                                <div id="m2-dec-result" class="text-5xl font-black font-mono text-emerald-400">0</div>
+                                <div class="text-xs text-slate-500">Decimal Value</div>
+                            </div>
+
+                            <!-- Synchronized Decimal Input -->
+                            <div class="space-y-1.5 pt-2">
+                                <label for="m2-dec-input" class="text-xs text-slate-400 font-medium">10진수에서 16진수로 역변환:</label>
+                                <input type="number" id="m2-dec-input" min="0" max="255" value="0" oninput="onDecimalInput(this.value)"
+                                    class="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-2 font-mono text-lg text-emerald-400 outline-none transition">
+                            </div>
+                        </div>
+
+                        <!-- Calculation breakdown -->
+                        <div class="bg-slate-950/60 rounded-xl p-4 border border-slate-800 space-y-3">
+                            <div class="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
+                                <i class="fa-solid fa-calculator text-indigo-400"></i>
+                                <span>16진수 → 10진수 계산 공식</span>
+                            </div>
+                            <div id="m2-math-formula" class="font-mono text-xs text-slate-300 space-y-1 bg-slate-900 p-3 rounded-lg border border-slate-800">
+                                <!-- Formula inserted here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ========================================================================= -->
+        <!-- MODE 3: 2진수 <> 16진수 변환 -->
+        <!-- ========================================================================= -->
+        <section id="view-bin-hex" class="mode-view space-y-6 hidden">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
+                <div>
+                    <h2 class="text-base font-bold text-slate-200 flex items-center justify-between">
+                        <span>2진수 ↔ 16진수 니블(Nibble) 대응 변환기</span>
+                        <span class="text-xs text-slate-400 font-normal">1 니블(Nibble) = 4비트 = 16진수 1자리</span>
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">
+                        8비트는 정확히 **4비트(상위 니블)** + **4비트(하위 니블)** 로 나뉘며, 각 4비트는 16진수 한 자리($0\sim\text{F}$)와 $1:1$로 완벽하게 대응합니다.
+                    </p>
+                </div>
+
+                <!-- Split Bit Cards Section (4 bits + 4 bits) -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative">
+                    
+                    <!-- Upper Nibble (Bit 7 ~ 4) -->
+                    <div class="bg-violet-950/20 border-2 border-violet-500/30 rounded-2xl p-5 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-violet-300 uppercase tracking-wider flex items-center space-x-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-violet-500"></span>
+                                <span>상위 니블 (High Nibble) : Bit 7 ~ Bit 4</span>
+                            </span>
+                            <span id="nibble-high-sum" class="text-xs font-mono font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">합계: 0</span>
+                        </div>
+
+                        <!-- Bit Cards 7 ~ 4 -->
+                        <div id="bit-cards-high-nibble" class="grid grid-cols-4 gap-2"></div>
+
+                        <!-- Arrow connector -->
+                        <div class="flex justify-center text-violet-400/60 my-1">
+                            <i class="fa-solid fa-arrow-down-long text-lg animate-bounce"></i>
+                        </div>
+
+                        <!-- Resulting Hex Digit Card for High Nibble -->
+                        <div class="bg-slate-950 border border-violet-500/50 rounded-xl p-4 flex items-center justify-between">
+                            <div>
+                                <div class="text-[10px] text-slate-400">상위 16진수 기호</div>
+                                <div id="m3-hex-high-digit" class="text-4xl font-black font-mono text-violet-400">0</div>
+                            </div>
+                            <div id="m3-hex-high-binary" class="text-right font-mono text-xs text-slate-400">
+                                0000₂ = 0₁₀
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lower Nibble (Bit 3 ~ 0) -->
+                    <div class="bg-pink-950/20 border-2 border-pink-500/30 rounded-2xl p-5 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-pink-300 uppercase tracking-wider flex items-center space-x-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-pink-500"></span>
+                                <span>하위 니블 (Low Nibble) : Bit 3 ~ Bit 0</span>
+                            </span>
+                            <span id="nibble-low-sum" class="text-xs font-mono font-bold text-pink-400 bg-pink-500/10 px-2 py-0.5 rounded">합계: 0</span>
+                        </div>
+
+                        <!-- Bit Cards 3 ~ 0 -->
+                        <div id="bit-cards-low-nibble" class="grid grid-cols-4 gap-2"></div>
+
+                        <!-- Arrow connector -->
+                        <div class="flex justify-center text-pink-400/60 my-1">
+                            <i class="fa-solid fa-arrow-down-long text-lg animate-bounce"></i>
+                        </div>
+
+                        <!-- Resulting Hex Digit Card for Low Nibble -->
+                        <div class="bg-slate-950 border border-pink-500/50 rounded-xl p-4 flex items-center justify-between">
+                            <div>
+                                <div class="text-[10px] text-slate-400">하위 16진수 기호</div>
+                                <div id="m3-hex-low-digit" class="text-4xl font-black font-mono text-pink-400">0</div>
+                            </div>
+                            <div id="m3-hex-low-binary" class="text-right font-mono text-xs text-slate-400">
+                                0000₂ = 0₁₀
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Combined Result Banner -->
+                <div class="bg-gradient-to-r from-violet-900/40 via-slate-900 to-pink-900/40 border border-slate-700/80 rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div class="flex items-center space-x-4">
+                        <div class="text-xs text-slate-400">
+                            최종 조합 16진수 표기:
+                        </div>
+                        <div id="m3-combined-hex" class="text-3xl font-black font-mono tracking-widest text-white">
+                            0x<span class="text-violet-400">0</span><span class="text-pink-400">0</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-4">
+                        <span class="text-xs text-slate-400">10진수 값:</span>
+                        <span id="m3-combined-dec" class="text-2xl font-bold font-mono text-emerald-400">0</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-graduation-cap text-amber-400 text-lg"></i>
+                    <h3 class="font-bold text-slate-200 text-sm">실전 진법 변환 연습 퀴즈</h3>
+                </div>
+                <button onclick="generateQuiz()" class="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-semibold transition flex items-center space-x-1.5">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                    <span>새 문제 불러오기</span>
+                </button>
+            </div>
+
+            <div id="quiz-container" class="bg-slate-950 border border-slate-800 rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="space-y-1 text-center md:text-left">
+                    <div id="quiz-question" class="text-base font-medium text-slate-200">
+                        문제: 10진수 <span class="font-bold font-mono text-blue-400">42</span>를 2진수로 만들어보세요!
+                    </div>
+                    <div class="text-xs text-slate-400">위 카드를 조작하여 정답 값을 완성한 후 검수 버튼을 누르세요.</div>
+                </div>
+
+                <div class="flex items-center space-x-3">
+                    <button onclick="checkQuizAnswer()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 active:scale-95 transition">
+                        정답 확인하기
+                    </button>
+                </div>
+            </div>
+
+            <div id="quiz-feedback" class="hidden p-3 rounded-lg text-xs font-medium text-center"></div>
+        </section>
+
+    </main>
+
+    <footer class="border-t border-slate-800 bg-slate-900/40 py-6 text-center text-xs text-slate-500 mt-auto">
+        <p>비트 카드 진법 변환기 (Binary, Decimal, Hexadecimal Interactive Visualizer)</p>
+        <p class="mt-1 text-slate-600">컴퓨터 구조 & 비트 연산 학습 지원 도구</p>
+    </footer>
+
+    <script>
+        // Global Application State
+        const state = {
+            value: 0,           // Number (0 ~ 255)
+            activeTab: 'bin-dec',// 'bin-dec' | 'hex-dec' | 'bin-hex'
+            soundEnabled: true,
+            quiz: {
+                targetVal: 0,
+                type: 'dec-to-bin' // 'dec-to-bin' | 'hex-to-dec' | 'bin-to-hex'
+            }
+        };
+
+        const BIT_WEIGHTS = [128, 64, 32, 16, 8, 4, 2, 1];
+        const HEX_SYMBOLS = ['0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'];
+
+        // Web Audio Synth for Subtle Click Effects
+        let audioCtx = null;
+
+        function playClickSound(freq = 440) {
+            if (!state.soundEnabled) return;
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(freq * 0.5, audioCtx.currentTime + 0.05);
+
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.05);
+            } catch (e) {
+                console.log('Audio Context error:', e);
+            }
+        }
+
+        function toggleSound() {
+            state.soundEnabled = !state.soundEnabled;
+            const icon = document.getElementById('soundIcon');
+            const text = document.getElementById('soundText');
+            if (state.soundEnabled) {
+                icon.className = 'fa-solid fa-volume-high text-blue-400';
+                text.innerText = '사운드 ON';
+                playClickSound(523);
+            } else {
+                icon.className = 'fa-solid fa-volume-xmark text-slate-500';
+                text.innerText = '사운드 OFF';
+            }
+        }
+
+        // Mode Switching
+        function switchMode(mode) {
+            state.activeTab = mode;
+            playClickSound(600);
+
+            // Update Tab Button Styles
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.className = 'tab-btn px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center space-x-2 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60';
+            });
+
+            const activeBtn = document.getElementById(`tab-${mode}`);
+            if (activeBtn) {
+                activeBtn.className = 'tab-btn px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center space-x-2 bg-blue-600 text-white shadow-lg shadow-blue-600/30';
+            }
+
+            // Hide all views, show selected
+            document.querySelectorAll('.mode-view').forEach(view => view.classList.add('hidden'));
+            document.getElementById(`view-${mode}`).classList.remove('hidden');
+
+            render();
+        }
+
+        // Value Control Functions
+        function setValue(val) {
+            const num = Math.min(255, Math.max(0, parseInt(val) || 0));
+            state.value = num;
+            playClickSound(480);
+            render();
+        }
+
+        function resetValue() {
+            setValue(0);
+        }
+
+        function adjustValue(delta) {
+            setValue(state.value + delta);
+        }
+
+        function setRandomValue() {
+            setValue(Math.floor(Math.random() * 256));
+        }
+
+        function toggleBit(bitIndex) {
+            // Bit 7 is MSB (weight 128), Bit 0 is LSB (weight 1)
+            const mask = 1 << bitIndex;
+            state.value = state.value ^ mask;
+            playClickSound(state.value & mask ? 700 : 350);
+            render();
+        }
+
+        function onDecimalInput(val) {
+            const num = Math.min(255, Math.max(0, parseInt(val) || 0));
+            state.value = num;
+            render();
+        }
+
+        function onHexDirectInput(hexStr) {
+            const cleanHex = hexStr.replace(/[^0-9a-fA-F]/g, '');
+            const parsed = parseInt(cleanHex, 16);
+            if (!isNaN(parsed)) {
+                state.value = Math.min(255, Math.max(0, parsed));
+                render();
+            }
+        }
+
+        // Helper: Convert 8bit int to bit array [b7, b6, b5, b4, b3, b2, b1, b0]
+        function getBitArray(val) {
+            const bits = [];
+            for (let i = 7; i >= 0; i--) {
+                bits.push((val >> i) & 1);
+            }
+            return bits;
+        }
+
+        // Render Hex Keypad Buttons for Mode 2
+        function initHexPickers() {
+            const highContainer = document.getElementById('high-hex-picker');
+            const lowContainer = document.getElementById('low-hex-picker');
+
+            highContainer.innerHTML = '';
+            lowContainer.innerHTML = '';
+
+            HEX_SYMBOLS.forEach((sym, idx) => {
+                const b1 = document.createElement('button');
+                b1.className = `hex-btn-high-${idx} h-8 rounded bg-slate-900 hover:bg-violet-600/30 text-xs font-mono font-bold border border-slate-800 text-slate-300 transition active:scale-95`;
+                b1.innerText = sym;
+                b1.onclick = () => {
+                    const currentLow = state.value & 0x0F;
+                    state.value = (idx << 4) | currentLow;
+                    playClickSound(500 + idx * 20);
+                    render();
+                };
+                highContainer.appendChild(b1);
+
+                const b2 = document.createElement('button');
+                b2.className = `hex-btn-low-${idx} h-8 rounded bg-slate-900 hover:bg-pink-600/30 text-xs font-mono font-bold border border-slate-800 text-slate-300 transition active:scale-95`;
+                b2.innerText = sym;
+                b2.onclick = () => {
+                    const currentHigh = state.value & 0xF0;
+                    state.value = currentHigh | idx;
+                    playClickSound(500 + idx * 20);
+                    render();
+                };
+                lowContainer.appendChild(b2);
+            });
+        }
+
+        function render() {
+            const bits = getBitArray(state.value); // Array of 8 bits [b7..b0]
+            const highNibbleVal = (state.value >> 4) & 0x0F;
+            const lowNibbleVal = state.value & 0x0F;
+            const hexHighSymbol = HEX_SYMBOLS[highNibbleVal];
+            const hexLowSymbol = HEX_SYMBOLS[lowNibbleVal];
+            const hexFull = hexHighSymbol + hexLowSymbol;
+
+            // ==========================================
+            // RENDER MODE 1: 2진수 <> 10진수
+            // ==========================================
+            const decInputM1 = document.getElementById('dec-input-m1');
+            const decSliderM1 = document.getElementById('dec-slider-m1');
+            if (document.activeElement !== decInputM1) {
+                decInputM1.value = state.value;
+            }
+            decSliderM1.value = state.value;
+
+            document.getElementById('m1-hex-val').innerText = `0x${hexFull}`;
+            
+            // ASCII preview
+            let asciiText = '없음 (범위 밖)';
+            if (state.value >= 32 && state.value <= 126) {
+                asciiText = `'${String.fromCharCode(state.value)}'`;
+            } else if (state.value < 32) {
+                asciiText = `제어 문자 (ASCII ${state.value})`;
+            }
+            document.getElementById('m1-ascii-val').innerText = asciiText;
+
+            const activeBitCount = bits.filter(b => b === 1).length;
+            document.getElementById('m1-active-bits').innerText = `${activeBitCount} / 8 비트`;
+
+            // Render Mode 1 Bit Cards
+            const bitCardsM1 = document.getElementById('bit-cards-m1');
+            bitCardsM1.innerHTML = '';
+
+            bits.forEach((bit, index) => {
+                const bitPos = 7 - index; // Bit position index (7 down to 0)
+                const weight = BIT_WEIGHTS[index];
+                const isActive = bit === 1;
+
+                const cardHtml = `
+                    <div class="bit-card-container flex flex-col items-center">
+                        <span class="text-[10px] font-mono text-slate-400 mb-1 font-semibold">2<sup>${bitPos}</sup> (${weight})</span>
+                        <button onclick="toggleBit(${bitPos})" 
+                            class="bit-card w-full aspect-[4/5] rounded-xl border-2 flex flex-col items-center justify-between p-2 select-none cursor-pointer ${
+                                isActive ? 'active-bit text-white border-blue-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'
+                            }">
+                            <span class="text-[9px] font-mono opacity-60">BIT ${bitPos}</span>
+                            <span class="text-2xl sm:text-3xl font-black font-mono ${isActive ? 'glow-text' : ''}">${bit}</span>
+                            <span class="text-[9px] font-semibold px-1.5 py-0.5 rounded ${isActive ? 'bg-blue-400/30 text-blue-100' : 'bg-slate-900 text-slate-600'}">
+                                ${isActive ? '+' + weight : '0'}
+                            </span>
+                        </button>
+                    </div>
+                `;
+                bitCardsM1.insertAdjacentHTML('beforeend', cardHtml);
+            });
+
+            // Math Expansion Formula for Mode 1
+            const mathTerms = bits.map((b, i) => {
+                const weight = BIT_WEIGHTS[i];
+                return b === 1 
+                    ? `<span class="text-blue-400 font-bold">(${b} × ${weight})</span>`
+                    : `<span class="text-slate-600">(${b} × ${weight})</span>`;
+            });
+            document.getElementById('math-expansion-m1').innerHTML = 
+                `${mathTerms.join(' + ')}<br>= <span class="text-emerald-400 font-bold text-sm">${state.value}</span>`;
+
+            // ==========================================
+            // RENDER MODE 2: 16진수 <> 10진수
+            // ==========================================
+            document.getElementById('hex-digit-high-display').innerText = hexHighSymbol;
+            document.getElementById('hex-digit-high-dec').innerText = `값: ${highNibbleVal * 16} (${highNibbleVal} × 16)`;
+            document.getElementById('hex-digit-low-display').innerText = hexLowSymbol;
+            document.getElementById('hex-digit-low-dec').innerText = `값: ${lowNibbleVal} (${lowNibbleVal} × 1)`;
+
+            const hexDirectInput = document.getElementById('hex-direct-input');
+            if (document.activeElement !== hexDirectInput) {
+                hexDirectInput.value = hexFull;
+            }
+
+            document.getElementById('m2-dec-result').innerText = state.value;
+            const m2DecInput = document.getElementById('m2-dec-input');
+            if (document.activeElement !== m2DecInput) {
+                m2DecInput.value = state.value;
+            }
+
+            // High & Low picker highlight buttons
+            HEX_SYMBOLS.forEach((_, idx) => {
+                const btnH = document.querySelector(`.hex-btn-high-${idx}`);
+                const btnL = document.querySelector(`.hex-btn-low-${idx}`);
+                if (btnH) {
+                    btnH.className = `hex-btn-high-${idx} h-8 rounded text-xs font-mono font-bold transition active:scale-95 border ${
+                        idx === highNibbleVal ? 'bg-violet-600 text-white border-violet-400 shadow-md shadow-violet-600/30' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
+                    }`;
+                }
+                if (btnL) {
+                    btnL.className = `hex-btn-low-${idx} h-8 rounded text-xs font-mono font-bold transition active:scale-95 border ${
+                        idx === lowNibbleVal ? 'bg-pink-600 text-white border-pink-400 shadow-md shadow-pink-600/30' : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-800'
+                    }`;
+                }
+            });
+
+            // Mode 2 Formula breakdown
+            document.getElementById('m2-math-formula').innerHTML = `
+                <div>(상위 '${hexHighSymbol}' × 16¹) + (하위 '${hexLowSymbol}' × 16⁰)</div>
+                <div class="text-indigo-300 font-bold">= (${highNibbleVal} × 16) + (${lowNibbleVal} × 1)</div>
+                <div class="text-emerald-400 font-bold text-sm">= ${highNibbleVal * 16} + ${lowNibbleVal} = ${state.value}</div>
+            `;
+
+            // ==========================================
+            // RENDER MODE 3: 2진수 <> 16진수
+            // ==========================================
+            document.getElementById('nibble-high-sum').innerText = `합계: ${highNibbleVal} (${hexHighSymbol})`;
+            document.getElementById('nibble-low-sum').innerText = `합계: ${lowNibbleVal} (${hexLowSymbol})`;
+
+            const highNibbleCardsContainer = document.getElementById('bit-cards-high-nibble');
+            const lowNibbleCardsContainer = document.getElementById('bit-cards-low-nibble');
+            highNibbleCardsContainer.innerHTML = '';
+            lowNibbleCardsContainer.innerHTML = '';
+
+            // Upper Nibble Bits (Bit 7 ~ Bit 4)
+            for (let i = 0; i < 4; i++) {
+                const bitPos = 7 - i;
+                const bit = bits[i];
+                const weight = BIT_WEIGHTS[i + 4]; // 8, 4, 2, 1
+                const isActive = bit === 1;
+
+                const cardHtml = `
+                    <div class="flex flex-col items-center">
+                        <span class="text-[9px] font-mono text-slate-400 mb-1">b${bitPos} (${weight})</span>
+                        <button onclick="toggleBit(${bitPos})" 
+                            class="bit-card w-full aspect-[4/5] rounded-xl border-2 flex flex-col items-center justify-center p-1 select-none cursor-pointer ${
+                                isActive ? 'active-nibble-a text-white border-violet-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'
+                            }">
+                            <span class="text-2xl font-black font-mono ${isActive ? 'glow-text' : ''}">${bit}</span>
+                        </button>
+                    </div>
+                `;
+                highNibbleCardsContainer.insertAdjacentHTML('beforeend', cardHtml);
+            }
+
+            // Lower Nibble Bits (Bit 3 ~ Bit 0)
+            for (let i = 4; i < 8; i++) {
+                const bitPos = 7 - i;
+                const bit = bits[i];
+                const weight = BIT_WEIGHTS[i]; // 8, 4, 2, 1
+                const isActive = bit === 1;
+
+                const cardHtml = `
+                    <div class="flex flex-col items-center">
+                        <span class="text-[9px] font-mono text-slate-400 mb-1">b${bitPos} (${weight})</span>
+                        <button onclick="toggleBit(${bitPos})" 
+                            class="bit-card w-full aspect-[4/5] rounded-xl border-2 flex flex-col items-center justify-center p-1 select-none cursor-pointer ${
+                                isActive ? 'active-nibble-b text-white border-pink-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'
+                            }">
+                            <span class="text-2xl font-black font-mono ${isActive ? 'glow-text' : ''}">${bit}</span>
+                        </button>
+                    </div>
+                `;
+                lowNibbleCardsContainer.insertAdjacentHTML('beforeend', cardHtml);
+            }
+
+            document.getElementById('m3-hex-high-digit').innerText = hexHighSymbol;
+            document.getElementById('m3-hex-high-binary').innerText = `${bits.slice(0,4).join('')}₂ = ${highNibbleVal}₁₀`;
+
+            document.getElementById('m3-hex-low-digit').innerText = hexLowSymbol;
+            document.getElementById('m3-hex-low-binary').innerText = `${bits.slice(4,8).join('')}₂ = ${lowNibbleVal}₁₀`;
+
+            document.getElementById('m3-combined-hex').innerHTML = `0x<span class="text-violet-400">${hexHighSymbol}</span><span class="text-pink-400">${hexLowSymbol}</span>`;
+            document.getElementById('m3-combined-dec').innerText = state.value;
+        }
+
+        function generateQuiz() {
+            const types = ['dec-to-bin', 'hex-to-dec', 'bin-to-hex'];
+            const chosenType = types[Math.floor(Math.random() * types.length)];
+            const target = Math.floor(Math.random() * 255) + 1; // 1 ~ 255
+
+            state.quiz.targetVal = target;
+            state.quiz.type = chosenType;
+
+            const questionEl = document.getElementById('quiz-question');
+            const feedbackEl = document.getElementById('quiz-feedback');
+            feedbackEl.classList.add('hidden');
+
+            const hexTarget = HEX_SYMBOLS[(target >> 4) & 0x0F] + HEX_SYMBOLS[target & 0x0F];
+            const binTarget = getBitArray(target).join('');
+
+            if (chosenType === 'dec-to-bin') {
+                questionEl.innerHTML = `문제: 10진수 <span class="font-bold font-mono text-blue-400 text-lg">${target}</span>에 맞게 비트 카드를 조작해보세요!`;
+            } else if (chosenType === 'hex-to-dec') {
+                questionEl.innerHTML = `문제: 16진수 <span class="font-bold font-mono text-indigo-400 text-lg">0x${hexTarget}</span>의 10진수 값은 얼마일까요? 상단에서 해당 값을 맞춰보세요!`;
+            } else {
+                questionEl.innerHTML = `문제: 2진수 <span class="font-bold font-mono text-emerald-400 text-lg">${binTarget}₂</span>을 만들어보세요!`;
+            }
+
+            playClickSound(650);
+        }
+
+        function checkQuizAnswer() {
+            const feedbackEl = document.getElementById('quiz-feedback');
+            feedbackEl.classList.remove('hidden');
+
+            if (state.value === state.quiz.targetVal) {
+                feedbackEl.className = 'p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-center text-xs animate-pulse';
+                feedbackEl.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 mr-1.5"></i> 정답입니다! 아주 훌륭합니다! 🎉 (목표: ${state.quiz.targetVal})`;
+                playClickSound(880);
+            } else {
+                feedbackEl.className = 'p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 font-bold text-center text-xs';
+                feedbackEl.innerHTML = `<i class="fa-solid fa-circle-xmark text-rose-400 mr-1.5"></i> 아쉽습니다! 현재 설정값(${state.value})은 정답(${state.quiz.targetVal})과 다릅니다. 다시 시도해보세요!`;
+                playClickSound(220);
+            }
+        }
+
+        window.onload = function() {
+            initHexPickers();
+            generateQuiz();
+            render();
+        };
+    </script>
+</body>
+</html>
